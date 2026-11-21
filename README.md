@@ -1,84 +1,101 @@
 # Millbook
 
-Order-to-audit prototype for a fictional Tamil Nadu snack factory. Follow the same 200 g murukku packets from flour receipt and batch production through invoice, dispatch, collection and monthly audit.
+Millbook follows a batch of 200 g murukku through a fictional Tamil Nadu snack factory. A production supervisor records flour receipts and packet output, salespeople take orders, and the billing desk issues invoices and records collections. An auditor can trace each stock movement back to the transaction that created it.
+
+**[Watch the benchmark demo on YouTube (1 min 58 sec)](https://youtu.be/eF059R34RSQ)** · [Design note and data model](DESIGN.md)
 
 ## Run the app
 
-With Docker and Docker Compose installed, from this folder run:
+From the repository root, with Docker and Docker Compose installed, run:
 
 ```sh
 docker compose up --build -d
 ```
 
-Open http://localhost:8000. On first launch the app creates the schema, six demo users, price list, customers, supplier, recipe and opening stock. Every new database starts **before** the first flour purchase. The named volume preserves postings across restarts. Use a new Compose project and an unused host port (or stop the original project) for a separate clean demo. Use `docker compose stop` to stop without removing records.
+Open [Millbook on localhost](http://localhost:8000). Sign in as `floor` with password `MillDemo2026!` to begin the benchmark. First launch creates the schema and seeds six users, opening stock, the recipe, price list, customers and supplier. A fresh database starts before the first flour purchase.
 
-For Python 3.12, use a virtual environment and then:
+The Compose volume preserves records across restarts. Run `docker compose stop` to stop the app. For a separate clean demo, use a new Compose project with a fresh volume and an available host port.
 
-```sh
-python -m pip install -r requirements.txt
-python app.py
+### Run with Python 3.12 on Windows
+
+In PowerShell, from the repository root:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe app.py
 ```
 
-Run the regression suite with `python -m unittest -v`. The tests use isolated temporary databases. Configuration: PORT (default 8000), MILL_DB (default data/mill.sqlite), DEMO_PASSWORD (first launch only), COOKIE_SECURE=1 behind HTTPS. The Compose default binds to loopback. For a hosted evaluator demo, run the container behind an HTTPS reverse proxy with a persistent volume mounted at /app/data, one app replica, and your chosen initial password. Demo accounts have shared credentials for assessment. Real production use requires account provisioning, unique passwords, access monitoring and a backup policy.
+Open the same localhost URL. To run the regression suite, use `.\.venv\Scripts\python.exe -m unittest -v`. The tests create isolated temporary databases.
 
-| Role | Login | Workspace |
+### Demo accounts
+
+All six demo users share the default password `MillDemo2026!`.
+
+| Role | Username | Workspace |
 |---|---|---|
-| Production supervisor | floor | Receipts, recipe, runs, actuals, overheads and inventory |
-| Field sales | sales-a, sales-b | Mobile order entry, own order status and own customer sales |
-| Factory admin | admin | Verification, invoice PDF, dispatch, credit notes and payments |
-| Accountant | audit | Read-only reports, stock and CSV/PDF export |
-| Owner | owner | Daily orders, inventory, alerts, cost, dues and reports |
+| Production supervisor | `floor` | Purchases, recipe, production runs, overheads and stock |
+| Field sales | `sales-a`, `sales-b` | Mobile order entry, own order status and customer-wise sales |
+| Factory admin | `admin` | Order verification, invoice PDFs, dispatch, credit notes and payments |
+| Accountant or auditor | `audit` | Read-only stock and reports with CSV and PDF export |
+| Owner | `owner` | Today's orders, inventory, variance alerts, costs and dues |
 
-The default password for all six demo users is **MillDemo2026!**.
+## Replay the benchmark
 
-## Why this stack
+Start with a fresh database so that the opening balance is 100 kg of flour and 50 finished packets.
 
-Python handles the posting rules and Decimal arithmetic. SQLite supports real transactional writes and makes the one-factory prototype portable. A small JavaScript frontend works at phone and desktop widths, and ReportLab creates downloadable PDFs on the server.
+1. **Receive flour.** As `floor`, open **Purchases** and receive 60 kg of flour at ₹45/kg.
+2. **Post production.** In **Production**, select one batch. Enter 188 good packets, 6 damaged pouches, 40 kg flour, 10.5 L oil, 1.2 kg spice mix and 9 cartons. Confirm that 194 pouches were issued. Post the run once. Check the closing balances in **Stock** and the variance tables in **Production**.
+3. **Invoice and dispatch.** As `sales-a`, use the mobile order form to submit 150 packets for Retailer A. As `admin`, approve the order, raise the GST invoice, download its PDF and record dispatch.
+4. **Check insufficient stock.** As `sales-b`, submit 120 packets for Distributor B. As `admin`, attempt approval at the original quantity. The order stays submitted with a shortage of 32 packets.
+5. **Collect payment.** As `admin`, record ₹4,000 against Retailer A’s invoice under SO-1.
+6. **Allocate overheads.** As `floor`, assign ₹1,200 labour and ₹600 gas/power to RUN-1. Each amount represents the total allocation for that run. Revising an amount updates the cost and logs the change.
+7. **Run the audit.** As `audit`, select the current month and export the registers. Date filters include both endpoints. Receivables ageing uses the end date and includes older invoices still outstanding on that date.
 
-## Replay the internship benchmark
+### Expected results
 
-1. Sign in as **floor**. In Purchases receive 60 kg of flour at ₹45 per kg.
-2. In Production use one batch. Enter 188 good packets, 6 damaged pouches, 40 kg flour, 10.5 L oil, 1.2 kg spice mix and 9 cartons. Confirm 194 issued pouches. Post once.
-3. Check Stock and the run variance tables. The order of saving output and issuing inputs is atomic, so no half-complete run affects available stock.
-4. On a mobile-width screen sign in as **sales-a** and submit 150 packets for Retailer A. As **admin**, approve, raise GST invoice, download its PDF and record dispatch.
-5. As **sales-b** submit 120 packets for Distributor B. As **admin** open the order and attempt approval with the original quantity. The shortage blocks approval while preserving the order for later fulfilment.
-6. Under SO-1 as **admin**, record ₹4,000. As **floor**, allocate ₹1,200 labour and ₹600 gas/power to RUN-1. These fields are the run's total allocations. Entering new amounts replaces the prior allocation and logs the revision.
-7. As **audit** select the current month and export each register. Ageing shows open invoices grouped by customer identity and labelled with their age bucket. The date range includes both endpoints; ageing is an as-of-end-date report including older unpaid invoices.
+| Measure | Result |
+|---|---|
+| Closing flour, oil and spice mix | 120 kg, 19.5 L and 3.8 kg |
+| Closing pouches and cartons | 306 pouches and 21 cartons |
+| Finished stock | 238 packets after production, 88 after dispatch |
+| Yield variance | 188 good vs 200 expected, −6% |
+| Oil and carton consumption variance | +5% oil and −10% cartons. Both exceed the 3% tolerance |
+| Retailer A invoice | ₹7,500 taxable + ₹187.50 CGST + ₹187.50 SGST = ₹7,875 |
+| Distributor B | 120 requested, 88 available, 32 short. The exercise applies 5% IGST if supplied |
+| Retailer A outstanding | ₹7,875 invoiced − ₹4,000 collected = ₹3,875 |
+| Run cost | ₹4,055 materials and packaging + ₹1,800 overheads = ₹5,855 |
+| Cost and pre-tax margin per packet | ₹31.14 cost and ₹18.86 margin at the ₹50 selling price |
 
-| Benchmark measure | Result |
-|---|---:|
-| Flour / oil / spice closing | 120 kg / 19.5 L / 3.8 kg |
-| Pouches / cartons closing | 306 / 21 |
-| Finished stock after production / dispatch | 238 / 88 packets |
-| Yield / oil / carton variance | −6% / +5% / −10%, all flagged |
-| Retailer A invoice | ₹7,500 + ₹187.50 CGST + ₹187.50 SGST = ₹7,875 |
-| Distributor B | 32 packets short; 5% IGST if supplied |
-| Retailer A outstanding | ₹3,875 |
-| Run inputs / overheads | ₹4,055 / ₹1,800 |
-| Cost / pre-tax margin per packet | ₹31.14 / ₹18.86 |
+Flour uses a moving weighted-average purchase rate. The opening 100 kg at ₹42/kg and the receipt of 60 kg at ₹45/kg give a rate of ₹43.125/kg. The run consumes ₹1,725 of flour, ₹1,470 of oil, ₹240 of spices, ₹485 of pouches and ₹135 of cartons. Dividing the total run cost of ₹5,855 by 188 good packets gives ₹31.14 per packet after rounding.
 
-Flour's moving average is (100 × ₹42 + 60 × ₹45) / 160 = ₹43.125/kg. The run consumes flour ₹1,725, oil ₹1,470, spice ₹240, pouches ₹485 and cartons ₹135. ₹5,855 / 188 = ₹31.14 rounded. Good output can include loose packets, so nine cartons need not hold all 188. The yield gap of 12 is tracked separately from six damaged empty pouches.
+Good output includes loose packets, so nine cartons can be used even when the run produces 188 packets. The 12-packet yield shortfall and six damaged empty pouches measure different losses.
 
-## Scope and interview guide
+## Implementation and scope
 
-**Minimum:** role authentication and access checks, seeded masters, mobile sales, editable order verification, stock reservations, financial-year invoice numbers, GST invoice PDF, atomic recipe postings, consumption/yield variance and exportable stock and sales registers.
+Python handles posting rules and decimal arithmetic. SQLite commits a run, its material issues and its finished-stock receipt in one transaction. The JavaScript frontend supports phone and desktop widths. ReportLab generates PDFs on the server.
 
-**Additional:** supplier receipts, weighted-average costing, run overheads, owner dashboard, payments and ageing, date-filtered sales/customer/product/GST/purchase/stock/production/collections registers, journalled credit notes and audit events. Sales quantities can be entered in cartons or packets. Receipts accept kg/g and L/mL. Exercise tax rates and fictional GST identifiers are supplied for this prototype. GST reports are outward-supply working papers for an accountant.
+- **Core workflow.** Role-based access, seeded master data, mobile order entry, editable verification, stock reservations, financial-year invoice numbers, GST invoice PDFs, production postings, variance checks, stock ledger and sales registers.
+- **Additional features.** Supplier receipts, weighted-average costing, run overheads, payments, ageing, owner dashboard, credit notes and audit events. Reports cover sales by customer and product, outward GST, purchases, stock, production and collections. Sales accept cartons or packets. Receipts support kg/g and L/mL.
+- **Prototype limits.** Order submission requires connectivity. Masters are seeded. Dispatch covers the full order, and invoice cancellation is available before dispatch and payment. Returns, FEFO, opening finished-stock valuation, GST filing and Tally integration are outside the prototype. The tax rates, HSN and GSTINs are illustrative. The email action opens a draft for manual PDF attachment. The 200 g pouch rule reconciles one pouch per good packet plus damaged pouches.
 
-**Limits:** online order submission, fixed seed masters, full dispatch per order, full cancellation only before dispatch/payment. No returns, FEFO, opening finished-stock valuation, GST filing or Tally integration. The seed HSN and GSTINs are illustrative. The invoice email action opens a draft for manual PDF attachment. The production material named 200 g pouch has a one-pouch-per-good-packet reconciliation rule.
+## Code map
 
-**Code map:** db.py and schema.sql define units and seed masters. operations.py handles postings and role permissions, reports.py builds the registers, documents.py renders PDFs, app.py checks sessions and serves JSON, and static/ui.js renders workspaces. DESIGN.md explains the model and transactions. Start a live change by tracing test_benchmark.py into the relevant posting rule.
+| File | Responsibility |
+|---|---|
+| [schema.sql](schema.sql), [db.py](db.py) | Tables, units, opening balances and seed masters |
+| [operations.py](operations.py) | Posting rules, permissions and stock movements |
+| [reports.py](reports.py), [documents.py](documents.py) | Registers, costing and PDF generation |
+| [app.py](app.py), [static/ui.js](static/ui.js) | Sessions, HTTP endpoints and role-specific screens |
+| [test_benchmark.py](test_benchmark.py), [test_http.py](test_http.py) | Benchmark arithmetic, transaction rollback, report downloads and access checks |
 
-## Demo and repository submission
+## Hosting configuration
 
-[Watch the captioned benchmark walkthrough](demo.mp4) (1 minute 58 seconds). It shows the application running with desktop and phone-width workspaces. Upload this MP4 to an unlisted YouTube video or a reviewer-accessible Drive file and add the resulting link here before submitting. The brief asks for one public GitHub or GitLab repository URL.
+| Variable | Purpose |
+|---|---|
+| `PORT` | Listening port. Defaults to `8000` |
+| `MILL_DB` | SQLite file. Defaults to `data/mill.sqlite` |
+| `DEMO_PASSWORD` | Initial password for seeded accounts on first launch |
+| `COOKIE_SECURE` | Set to `1` behind HTTPS |
 
-The distributed folder includes Git history. Create an empty repository in your own account, open a terminal in the extracted Millbook folder, and run the following using its actual remote URL:
-
-```sh
-git log --oneline
-git remote add origin YOUR_REPOSITORY_URL
-git push -u origin main
-```
-
-Commit the hosted video link to the README. Review the live-change exercise in the internship brief and replay the scenario yourself before your interview.
+Compose binds to loopback by default. For a hosted assessment, use one app replica, an HTTPS reverse proxy and a persistent volume mounted at `/app/data`. Shared demo credentials are intended for the fictional dataset. A real factory deployment would also need individual account provisioning, access monitoring and backups.
