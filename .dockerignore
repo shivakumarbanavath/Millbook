@@ -1,0 +1,7 @@
+.git
+data
+__pycache__
+.venv
+*.sqlite*
+.env
+demo.mp4
