@@ -68,3 +68,17 @@ Flour's moving average is (100 × ₹42 + 60 × ₹45) / 160 = ₹43.125/kg. The
 **Limits:** online order submission, fixed seed masters, full dispatch per order, full cancellation only before dispatch/payment. No returns, FEFO, opening finished-stock valuation, GST filing or Tally integration. The seed HSN and GSTINs are illustrative. The invoice email action opens a draft for manual PDF attachment. The production material named 200 g pouch has a one-pouch-per-good-packet reconciliation rule.
 
 **Code map:** db.py and schema.sql define units and seed masters. operations.py handles postings and role permissions, reports.py builds the registers, documents.py renders PDFs, app.py checks sessions and serves JSON, and static/ui.js renders workspaces. DESIGN.md explains the model and transactions. Start a live change by tracing test_benchmark.py into the relevant posting rule.
+
+## Demo and repository submission
+
+[Watch the captioned benchmark walkthrough](demo.mp4) (1 minute 58 seconds). It shows the application running with desktop and phone-width workspaces. Upload this MP4 to an unlisted YouTube video or a reviewer-accessible Drive file and add the resulting link here before submitting. The brief asks for one public GitHub or GitLab repository URL.
+
+The distributed folder includes Git history. Create an empty repository in your own account, open a terminal in the extracted Millbook folder, and run the following using its actual remote URL:
+
+```sh
+git log --oneline
+git remote add origin YOUR_REPOSITORY_URL
+git push -u origin main
+```
+
+Commit the hosted video link to the README. Review the live-change exercise in the internship brief and replay the scenario yourself before your interview.
